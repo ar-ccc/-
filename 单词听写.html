@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单词学习</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f9;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 300px;
+        }
+        input[type="text"] {
+            margin-top: 10px;
+            padding: 10px;
+            width: calc(100% - 22px);
+            box-sizing: border-box;
+            border: none;
+            border-bottom: 2px solid #ccc;
+            outline: none;
+            font-size: 1.2em;
+            text-align: center; /* 文字居中 */
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            border-bottom-color: #007bff;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 25px;
+            background-color: blue;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 1em;
+        }
+        button:hover {
+            background-color: darkblue;
+        }
+        .add-word-modal {
+            display: flex;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            text-align: left;
+        }
+        .modal-input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            height: 100px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            resize: vertical;
+            font-size: 1em;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: space-between;
+        }
+        .modal-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 1em;
+        }
+        .modal-button-primary {
+            background-color: blue;
+            color: white;
+        }
+        .modal-button-primary:hover {
+            background-color: darkblue;
+        }
+        .modal-button-secondary {
+            background-color: gray;
+            color: white;
+        }
+        .modal-button-secondary:hover {
+            background-color: darkgray;
+        }
+        .speak-icon {
+            cursor: pointer;
+            margin-left: 5px;
+        }
+        #meaning {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #resultMessage {
+            font-size: 1.2em;
+            margin-top: 10px;
+        }
+        #progress {
+            margin-top: 20px;
+        }
+        .wrong-words-container {
+            margin-top: 20px;
+        }
+        .example-sentence {
+            margin-top: 10px;
+            font-style: italic;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="add-word-btn" onclick="openModal()">添加单词</button>
+        <p id="meaning"></p>
+        <input type="text" id="userInput" style="text-align: center;">
+        <p id="resultMessage"></p>
+        <p id="progress"></p>
+        <div id="wrongWordsContainer" class="wrong-words-container"></div>
+        <p id="exampleSentence" class="example-sentence"></p>
+    </div>
+
+    <div class="add-word-modal" id="addWordModal">
+        <div class="modal-content">
+            <h2>添加单词</h2>
+            <textarea class="modal-input" id="newWords" placeholder="格式：sign 标志、指示牌；sentence 示例句子"></textarea>
+            <div class="modal-buttons">
+                <button class="modal-button modal-button-primary" onclick="addWords()">确定</button>
+                <button class="modal-button modal-button-secondary" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="correctSound" src="ding.mp3" preload="auto"></audio>
+
+    <script>
+        let wordsData = [];
+        let wrongWords = [];
+        let currentWordIndex = 0;
+        let correctCount = 0;
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.voice = speechSynthesis.getVoices().find(voice => voice.name.includes('Zira')); // 使用Zira声音
+                speechSynthesis.speak(utterance);
+            } else {
+                console.log("浏览器不支持语音合成");
+            }
+        }
+
+        function loadNextWord() {
+            if (currentWordIndex >= wordsData.length) {
+                document.getElementById('meaning').innerHTML = "所有单词已完成！";
+                document.getElementById('userInput').disabled = true;
+                document.getElementById('userInput').removeEventListener('keypress', handleKeyPress);
+                updateProgress();
+                return;
+            }
+
+            const wordInfo = wordsData[currentWordIndex];
+            document.getElementById('meaning').innerHTML = `${wordInfo.meaning} <i class="fas fa-volume-up speak-icon" onclick="speak('${wordInfo.word}')"></i>`;
+            document.getElementById('userInput').value = "";
+            document.getElementById('resultMessage').innerText = "";
+            document.getElementById('exampleSentence').innerText = wordInfo.sentence ? `示例句子: ${wordInfo.sentence}` : "";
+
+            // 自动朗读当前单词
+            speak(wordInfo.word);
+
+            // 启用输入框和事件监听器
+            document.getElementById('userInput').disabled = false;
+            document.getElementById('userInput').addEventListener('keypress', handleKeyPress);
+            document.getElementById('userInput').focus();
+        }
+
+        function checkAnswer() {
+            if (currentWordIndex >= wordsData.length) return;
+
+            const userInput = document.getElementById('userInput').value.trim().toLowerCase();
+            const correctWord = wordsData[currentWordIndex].word.toLowerCase();
+
+            if (userInput === correctWord) {
+                document.getElementById('resultMessage').innerText = `正确！单词是: ${wordsData[currentWordIndex].word}`;
+                setTimeout(playCorrectSound, 500); // 0.5秒后播放提示音
+                correctCount++;
+                setTimeout(() => {
+                    currentWordIndex++;
+                    loadNextWord(); // 切换到下一个单词
+                }, 1000); // 1秒后切换到下一个单词
+            } else {
+                wrongWords.push(wordsData[currentWordIndex]);
+                document.getElementById('resultMessage').innerText = "错误，请再试一次。";
+            }
+            updateProgress();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                checkAnswer();
+            }
+        }
+
+        function openModal() {
+            document.getElementById('addWordModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('addWordModal').style.display = 'none';
+        }
+
+        function addWords() {
+            const newWordsText = document.getElementById('newWords').value.trim();
+            const newWordsArray = newWordsText.split('\n');
+
+            newWordsArray.forEach(wordEntry => {
+                const [word, ...rest] = wordEntry.split(/\s+/);
+                if (word && rest.length > 0) {
+                    const meaningAndSentence = rest.join(' ');
+                    const [meaning, sentence] = meaningAndSentence.split(';').map(s => s.trim());
+                    wordsData.push({ word: word.trim(), meaning, sentence });
+                }
+            });
+
+            closeModal();
+            if (wordsData.length > 0) {
+                currentWordIndex = 0;
+                loadNextWord(); // 加载第一个单词
+            } else {
+                document.getElementById('meaning').innerHTML = "请至少添加一个单词。";
+            }
+        }
+
+        function playCorrectSound() {
+            const audio = document.getElementById('correctSound');
+            audio.currentTime = 0; // 重置音频到开头
+            audio.play().catch(error => {
+                console.error("播放音频失败:", error);
+            });
+        }
+
+        function updateProgress() {
+            const progressElement = document.getElementById('progress');
+            const totalWords = wordsData.length;
+            const learnedWords = currentWordIndex;
+            const accuracy = totalWords > 0 ? ((correctCount / totalWords) * 100).toFixed(2) : 0;
+            progressElement.innerText = `已学单词: ${learnedWords}/${totalWords}, 正确率: ${accuracy}%`;
+
+            const wrongWordsContainer = document.getElementById('wrongWordsContainer');
+            wrongWordsContainer.innerHTML = "<h3>错题回顾:</h3>";
+            wrongWords.forEach((wordInfo, index) => {
+                const wordDiv = document.createElement('div');
+                wordDiv.innerText = `${index + 1}. ${wordInfo.word}: ${wordInfo.meaning}`;
+                wrongWordsContainer.appendChild(wordDiv);
+            });
+        }
+
+        window.onload = () => {
+            // 初始打开添加单词模态框
+            openModal();
+
+            // 等待语音列表加载完成
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = () => {};
+            }
+        };
+    </script>
+</body>
+</html>
